@@ -87,38 +87,38 @@ impl VM {
             Opcode::LOAD => {
                 let register = self.next_8_bits()? as usize;
                 let number = self.next_16_bits()? as u32;
-                
+
                 if register >= self.registers.len() {
                     return Err(VMError::RegisterOutOfBounds);
                 }
-                
+
                 self.registers[register] = number as i32;
             }
             Opcode::ADD => {
                 let (reg1, reg2, reg3) = self.get_three_registers()?;
                 self.registers[reg3] = self.registers[reg1]
                     .checked_add(self.registers[reg2])
-                    .unwrap_or(0);  // Handle potential overflow
+                    .unwrap_or(0); // Handle potential overflow
             }
             Opcode::SUB => {
                 let (reg1, reg2, reg3) = self.get_three_registers()?;
                 self.registers[reg3] = self.registers[reg1]
                     .checked_sub(self.registers[reg2])
-                    .unwrap_or(0);  // Handle potential underflow
+                    .unwrap_or(0); // Handle potential underflow
             }
             Opcode::MUL => {
                 let (reg1, reg2, reg3) = self.get_three_registers()?;
                 self.registers[reg3] = self.registers[reg1]
                     .checked_mul(self.registers[reg2])
-                    .unwrap_or(0);  // Handle potential overflow
+                    .unwrap_or(0); // Handle potential overflow
             }
             Opcode::DIV => {
                 let (reg1, reg2, reg3) = self.get_three_registers()?;
-                
+
                 if self.registers[reg2] == 0 {
                     return Err(VMError::DivisionByZero);
                 }
-                
+
                 self.registers[reg3] = self.registers[reg1] / self.registers[reg2];
                 self.remainder = (self.registers[reg1] % self.registers[reg2]) as u32;
             }
@@ -126,7 +126,7 @@ impl VM {
                 return Err(VMError::InvalidOpcode);
             }
         }
-        
+
         Ok(true)
     }
 
@@ -135,9 +135,10 @@ impl VM {
         let reg2 = self.next_8_bits()? as usize;
         let reg3 = self.next_8_bits()? as usize;
 
-        if reg1 >= self.registers.len() || 
-           reg2 >= self.registers.len() || 
-           reg3 >= self.registers.len() {
+        if reg1 >= self.registers.len()
+            || reg2 >= self.registers.len()
+            || reg3 >= self.registers.len()
+        {
             return Err(VMError::RegisterOutOfBounds);
         }
 
