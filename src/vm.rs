@@ -1,10 +1,14 @@
-// Virtual Machine Implementation with LOAD Opcode
+// Virtual Machine Implementation with Arithmetic Opcodes
 
 #[derive(Debug, PartialEq)]
 pub enum Opcode {
     HLT,
     IGL,
     LOAD,
+    ADD,
+    SUB,
+    MUL,
+    DIV,
 }
 
 #[derive(Debug, PartialEq)]
@@ -17,6 +21,10 @@ impl From<u8> for Opcode {
         match v {
             0 => Opcode::HLT,
             1 => Opcode::LOAD,
+            2 => Opcode::ADD,
+            3 => Opcode::SUB,
+            4 => Opcode::MUL,
+            5 => Opcode::DIV,
             _ => Opcode::IGL,
         }
     }
@@ -28,10 +36,12 @@ impl Instruction {
     }
 }
 
+#[derive(Debug)]
 pub struct VM {
     registers: [i32; 32],
     pc: usize,
     program: Vec<u8>,
+    remainder: u32,
 }
 
 impl VM {
@@ -40,6 +50,7 @@ impl VM {
             registers: [0; 32],
             program: vec![],
             pc: 0,
+            remainder: 0,
         }
     }
 
@@ -77,6 +88,31 @@ impl VM {
                 let register = self.next_8_bits() as usize;
                 let number = self.next_16_bits() as u32;
                 self.registers[register] = number as i32;
+            }
+            Opcode::ADD => {
+                let register1 = self.next_8_bits() as usize;
+                let register2 = self.next_8_bits() as usize;
+                let register3 = self.next_8_bits() as usize;
+                self.registers[register3] = self.registers[register1] + self.registers[register2];
+            }
+            Opcode::SUB => {
+                let register1 = self.next_8_bits() as usize;
+                let register2 = self.next_8_bits() as usize;
+                let register3 = self.next_8_bits() as usize;
+                self.registers[register3] = self.registers[register1] - self.registers[register2];
+            }
+            Opcode::MUL => {
+                let register1 = self.next_8_bits() as usize;
+                let register2 = self.next_8_bits() as usize;
+                let register3 = self.next_8_bits() as usize;
+                self.registers[register3] = self.registers[register1] * self.registers[register2];
+            }
+            Opcode::DIV => {
+                let register1 = self.registers[self.next_8_bits() as usize];
+                let register2 = self.registers[self.next_8_bits() as usize];
+                let register3 = self.next_8_bits() as usize;
+                self.registers[register3] = register1 / register2;
+                self.remainder = (register1 % register2) as u32;
             }
             Opcode::IGL => {
                 println!("Unrecognized opcode found! Terminating!");
@@ -127,6 +163,63 @@ mod tests {
         test_vm.add_program(vec![1, 0, 1, 244]); // LOAD instruction for register 0 with value 500
         test_vm.run();
         assert_eq!(test_vm.registers[0], 500);
+    }
+
+    #[test]
+    fn test_add_opcode() {
+        let mut test_vm = VM::new();
+        test_vm.add_program(vec![
+            1, 0, 0, 10,   // LOAD 10 into register 0
+            1, 1, 0, 15,   // LOAD 15 into register 1
+            2, 0, 1, 2     // ADD register 0 and 1, store in register 2
+        ]);
+        test_vm.run();
+        assert_eq!(test_vm.registers[0], 10);
+        assert_eq!(test_vm.registers[1], 15);
+        assert_eq!(test_vm.registers[2], 25);
+    }
+
+    #[test]
+    fn test_sub_opcode() {
+        let mut test_vm = VM::new();
+        test_vm.add_program(vec![
+            1, 0, 0, 15,   // LOAD 15 into register 0
+            1, 1, 0, 10,   // LOAD 10 into register 1
+            3, 0, 1, 2     // SUB register 0 - register 1, store in register 2
+        ]);
+        test_vm.run();
+        assert_eq!(test_vm.registers[0], 15);
+        assert_eq!(test_vm.registers[1], 10);
+        assert_eq!(test_vm.registers[2], 5);
+    }
+
+    #[test]
+    fn test_mul_opcode() {
+        let mut test_vm = VM::new();
+        test_vm.add_program(vec![
+            1, 0, 0, 5,    // LOAD 5 into register 0
+            1, 1, 0, 10,   // LOAD 10 into register 1
+            4, 0, 1, 2     // MUL register 0 * register 1, store in register 2
+        ]);
+        test_vm.run();
+        assert_eq!(test_vm.registers[0], 5);
+        assert_eq!(test_vm.registers[1], 10);
+        assert_eq!(test_vm.registers[2], 50);
+    }
+
+    #[test]
+    fn test_div_opcode() {
+        let mut test_vm = VM::new();
+        test_vm.add_program(vec![
+            1, 0, 0, 8,    // LOAD 8 into register 0
+            1, 1, 0, 5,    // LOAD 5 into register 1
+            5, 0, 1, 2     // DIV register 0 / register 1, store in register 2
+        ]);
+        test_vm.run();
+        assert_eq!(test_vm.registers[0], 8);
+        assert_eq!(test_vm.registers[1], 5);
+        assert_eq!(test_vm.registers[2], 1);
+        assert_eq!(test_vm.remainder, 3);
     }
 
     #[test]
