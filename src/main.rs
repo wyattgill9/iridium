@@ -1,4 +1,5 @@
-use vm_project::{Assembler, VM};
+use vm_project::{Assembler, VM, Parser};
+use vm_project::ast::{Program, Function, Expr, BinOp};
 
 // Functions that the language should support:
 // Conditional branching (e.g., if, while)

@@ -9,6 +9,8 @@ pub enum Opcode {
     SUB,
     MUL,
     DIV,
+    JMP,
+    JMPF,
 }
 
 #[derive(Debug, PartialEq)]
@@ -98,19 +100,19 @@ impl VM {
                 let (reg1, reg2, reg3) = self.get_three_registers()?;
                 self.registers[reg3] = self.registers[reg1]
                     .checked_add(self.registers[reg2])
-                    .unwrap_or(0); // Handle potential overflow
+                    .unwrap_or(0); // handle potential overflow
             }
             Opcode::SUB => {
                 let (reg1, reg2, reg3) = self.get_three_registers()?;
                 self.registers[reg3] = self.registers[reg1]
                     .checked_sub(self.registers[reg2])
-                    .unwrap_or(0); // Handle potential underflow
+                    .unwrap_or(0); // handle potential underflow
             }
             Opcode::MUL => {
                 let (reg1, reg2, reg3) = self.get_three_registers()?;
                 self.registers[reg3] = self.registers[reg1]
                     .checked_mul(self.registers[reg2])
-                    .unwrap_or(0); // Handle potential overflow
+                    .unwrap_or(0); // handle potential overflow
             }
             Opcode::DIV => {
                 let (reg1, reg2, reg3) = self.get_three_registers()?;
@@ -125,6 +127,14 @@ impl VM {
             Opcode::IGL => {
                 return Err(VMError::InvalidOpcode);
             }
+            Opcode::JMP => {
+                let target = self.registers[self.next_8_bits().unwrap_or(0) as usize];
+                self.pc = target as usize;
+            }            
+            Opcode::JMPF => {
+                let value = self.registers[self.next_8_bits().unwrap_or(0) as usize];
+                self.pc += value as usize;
+            }            
         }
 
         Ok(true)
@@ -179,6 +189,8 @@ impl From<u8> for Opcode {
             3 => Opcode::SUB,
             4 => Opcode::MUL,
             5 => Opcode::DIV,
+            6 => Opcode::JMP,
+            7 => Opcode::JMPF,
             _ => Opcode::IGL,
         }
     }

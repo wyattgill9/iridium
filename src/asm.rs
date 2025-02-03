@@ -21,7 +21,7 @@ impl Assembler {
     }
 
     pub fn compile(&mut self, source: &str) -> Result<Vec<u8>, AssemblerError> {
-        // collect symbols in first pass
+        // collect symb on first pass
         let mut first_pass_lines = Vec::new();
         let mut current_address = 0;
 
@@ -44,7 +44,7 @@ impl Assembler {
             current_address += self.estimate_instruction_size(line)?;
         }
 
-        // Compile instructions
+        // compile
         let mut bytecode = Vec::new();
 
         for line in first_pass_lines {
@@ -89,6 +89,30 @@ impl Assembler {
                     bytecode.push(reg2);
                     bytecode.push(reg3);
                 }
+                "JMP" => {
+                    if tokens.len() < 2 {
+                        return Err(AssemblerError::SyntaxError(format!(
+                            "Invalid JMP instruction: {}",
+                            line
+                        )));
+                    }
+                    let target = self.parse_value(&tokens[1])?;
+
+                    bytecode.push(6); // JMP
+                    bytecode.extend_from_slice(&target.to_be_bytes());
+                }
+                "JMPF" => {
+                    if tokens.len() < 2 {
+                        return Err(AssemblerError::SyntaxError(format!(
+                            "Invalid JMPF instruction: {}",
+                            line
+                        )));
+                    }
+                    let value = self.parse_value(&tokens[1])?;
+
+                    bytecode.push(7); // JMPF
+                    bytecode.extend_from_slice(&value.to_be_bytes());
+                }
                 "HLT" => {
                     bytecode.push(0); // HLT
                 }
@@ -98,7 +122,6 @@ impl Assembler {
             }
         }
 
-        // Pad bytecode to 32 bytes
         while bytecode.len() < 32 {
             bytecode.push(0);
         }
@@ -139,6 +162,7 @@ impl Assembler {
         match tokens[0].to_uppercase().as_str() {
             "LOAD" => Ok(4), // opcode (1) + register (1) + 16-bit value (2)
             "ADD" | "SUB" | "MUL" | "DIV" => Ok(4), // opcode (1) + 3 registers (3)
+            "JMP" | "JMPF" => Ok(3), // opcode (1) + 16-bit value (2)
             "HLT" => Ok(1),  // single byte opcode
             _ => Err(AssemblerError::UnknownInstruction(tokens[0].to_string())),
         }
