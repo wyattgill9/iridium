@@ -1,137 +1,248 @@
-use std::iter::Peekable;
-use std::str::Chars;
-use crate::ast::{Expr, Function, Program};
+use std::fs::File;
+use std::io::Read;
+use std::path::Path;
+
+// AST Definitions
+#[derive(Debug)]
+pub enum Expr {
+    Variable(String),
+    Literal(i64),
+    BinOp(Box<Expr>, BinOp, Box<Expr>),
+}
 
 #[derive(Debug)]
-pub enum ParseError {
-    UnexpectedToken(String),
-    ExpectedToken(String),
-    InvalidNumber(String),
+pub enum BinOp {
+    Add,
 }
 
-pub struct Parser<'a> {
-    input: Peekable<Chars<'a>>,
+#[derive(Debug)]
+pub enum Statement {
+    Declare(String, Expr),
+    Print(Expr),
 }
 
-impl<'a> Parser<'a> {
-    pub fn new(input: &'a str) -> Self {
-        Self {
-            input: input.chars().peekable(),
+#[derive(Debug)]
+pub struct Program {
+    pub statements: Vec<Statement>,
+}
+
+// Token Definitions
+#[derive(Debug, PartialEq)]
+enum Token {
+    Int,
+    Print,
+    Ident(String),
+    Literal(i64),
+    Equals,
+    Plus,
+    Semicolon,
+    LParen,
+    RParen,
+}
+
+// Lexer
+struct Lexer {
+    chars: Vec<char>,
+    pos: usize,
+}
+
+impl Lexer {
+    fn new(input: &str) -> Self {
+        Lexer {
+            chars: input.chars().collect(),
+            pos: 0,
         }
     }
 
-    fn consume_whitespace(&mut self) {
-        while let Some(&c) = self.input.peek() {
-            if c.is_whitespace() {
-                self.input.next();
-            } else {
-                break;
+    fn next_token(&mut self) -> Option<Token> {
+        self.skip_whitespace();
+        
+        if self.pos >= self.chars.len() {
+            return None;
+        }
+
+        let c = self.chars[self.pos];
+        
+        match c {
+            'a'..='z' | 'A'..='Z' => self.parse_identifier(),
+            '0'..='9' => self.parse_number(),
+            '=' => {
+                self.pos += 1;
+                Some(Token::Equals)
             }
+            '+' => {
+                self.pos += 1;
+                Some(Token::Plus)
+            }
+            ';' => {
+                self.pos += 1;
+                Some(Token::Semicolon)
+            }
+            '(' => {
+                self.pos += 1;
+                Some(Token::LParen)
+            }
+            ')' => {
+                self.pos += 1;
+                Some(Token::RParen)
+            }
+            _ => panic!("Unexpected character: {} at position {}", c, self.pos),
         }
     }
 
-    fn parse_identifier(&mut self) -> Result<String, ParseError> {
-        let mut ident = String::new();
-        while let Some(&c) = self.input.peek() {
-            if c.is_alphabetic() || c == '_' {
-                ident.push(c);
-                self.input.next();
-            } else {
-                break;
-            }
+    fn parse_identifier(&mut self) -> Option<Token> {
+        let start = self.pos;
+        while self.pos < self.chars.len() && self.chars[self.pos].is_alphanumeric() {
+            self.pos += 1;
         }
-        if ident.is_empty() {
-            Err(ParseError::UnexpectedToken("Expected identifier".to_string()))
-        } else {
-            Ok(ident)
+        let ident: String = self.chars[start..self.pos].iter().collect();
+
+        match ident.as_str() {
+            "int" => Some(Token::Int),
+            "Print" => Some(Token::Print),
+            _ => Some(Token::Ident(ident)),
         }
     }
 
-    fn parse_number(&mut self) -> Result<Expr, ParseError> {
-        let mut num_str = String::new();
-        while let Some(&c) = self.input.peek() {
-            if c.is_numeric() || c == '.' {
-                num_str.push(c);
-                self.input.next();
-            } else {
-                break;
-            }
+    fn parse_number(&mut self) -> Option<Token> {
+        let start = self.pos;
+        while self.pos < self.chars.len() && self.chars[self.pos].is_ascii_digit() {
+            self.pos += 1;
         }
-        num_str
-            .parse::<f64>()
-            .map(Expr::Number)
-            .map_err(|_| ParseError::InvalidNumber(num_str))
+        let num: String = self.chars[start..self.pos].iter().collect();
+        Some(Token::Literal(num.parse().unwrap()))
     }
 
-    fn parse_expr(&mut self) -> Result<Expr, ParseError> {
-        self.consume_whitespace();
-        if let Some(&c) = self.input.peek() {
-            if c.is_numeric() {
-                return self.parse_number();
-            } else if c.is_alphabetic() {
-                let ident = self.parse_identifier()?;
-                if self.input.peek() == Some(&'(') {
-                    self.input.next(); // Consume '('
-                    let mut args = Vec::new();
-                    while self.input.peek() != Some(&')') {
-                        args.push(self.parse_expr()?);
-                        if self.input.peek() == Some(&',') {
-                            self.input.next(); // Consume ','
-                        }
-                    }
-                    self.input.next(); // Consume ')'
-                    return Ok(Expr::Call {
-                        function: ident,
-                        args,
-                    });
-                } else {
-                    return Ok(Expr::Variable(ident));
-                }
-            }
+    fn skip_whitespace(&mut self) {
+        while self.pos < self.chars.len() && self.chars[self.pos].is_whitespace() {
+            self.pos += 1;
         }
-        Err(ParseError::UnexpectedToken("Expected expression".to_string()))
+    }
+}
+
+// Parser
+pub struct Parser {
+    tokens: Vec<Token>,
+    pos: usize,
+}
+
+impl Parser {
+    fn new(tokens: Vec<Token>) -> Self {
+        Parser { tokens, pos: 0 }
     }
 
-    fn parse_function(&mut self) -> Result<Function, ParseError> {
-        self.consume_whitespace();
-        if self.input.next() != Some('f') || self.input.next() != Some('n') {
-            return Err(ParseError::ExpectedToken("Expected 'fn'".to_string()));
+    fn parse(&mut self) -> Program {
+        let mut statements = Vec::new();
+
+        while self.pos < self.tokens.len() {
+            statements.push(self.parse_statement());
         }
-        self.consume_whitespace();
-        let name = self.parse_identifier()?;
-        self.consume_whitespace();
-        if self.input.next() != Some('(') {
-            return Err(ParseError::ExpectedToken("Expected '('".to_string()));
-        }
-        let mut params = Vec::new();
-        while self.input.peek() != Some(&')') {
-            params.push(self.parse_identifier()?);
-            if self.input.peek() == Some(&',') {
-                self.input.next(); // Consume ','
-            }
-        }
-        self.input.next(); // Consume ')'
-        self.consume_whitespace();
-        if self.input.next() != Some('{') {
-            return Err(ParseError::ExpectedToken("Expected '{'".to_string()));
-        }
-        let mut body = Vec::new();
-        while self.input.peek() != Some(&'}') {
-            body.push(self.parse_expr()?);
-            if self.input.peek() == Some(&';') {
-                self.input.next(); // Consume ';'
-            }
-        }
-        self.input.next(); // Consume '}'
-        Ok(Function { name, params, body })
+
+        Program { statements }
     }
 
-    pub fn parse_program(&mut self) -> Result<Program, ParseError> {
-        let mut functions = Vec::new();
-        while self.input.peek().is_some() {
-            functions.push(self.parse_function()?);
-            self.consume_whitespace();
+    fn parse_statement(&mut self) -> Statement {
+        match self.peek() {
+            Some(Token::Int) => self.parse_declaration(),
+            Some(Token::Print) => self.parse_print(),
+            _ => panic!("Unexpected token"),
         }
-        Ok(Program { functions })
+    }
+
+    fn parse_declaration(&mut self) -> Statement {
+        self.consume(Token::Int);
+        let ident = self.parse_ident();
+        self.consume(Token::Equals);
+        let expr = self.parse_expr();
+        self.consume(Token::Semicolon);
+        Statement::Declare(ident, expr)
+    }
+
+    fn parse_print(&mut self) -> Statement {
+        self.consume(Token::Print);
+        self.consume(Token::LParen);
+        let expr = self.parse_expr();
+        self.consume(Token::RParen);
+        self.consume(Token::Semicolon);
+        Statement::Print(expr)
+    }
+
+    fn parse_expr(&mut self) -> Expr {
+        let mut expr = self.parse_primary();
+
+        while let Some(Token::Plus) = self.peek() {
+            self.pos += 1;
+            let right = self.parse_primary();
+            expr = Expr::BinOp(Box::new(expr), BinOp::Add, Box::new(right));
+        }
+
+        expr
+    }
+
+    fn parse_primary(&mut self) -> Expr {
+        match self.peek().unwrap() {
+            Token::Ident(name) => {
+                let name = name.clone();
+                self.pos += 1;
+                Expr::Variable(name)
+            }
+            Token::Literal(n) => {
+                let n = *n;
+                self.pos += 1;
+                Expr::Literal(n)
+            }
+            _ => panic!("Unexpected token in expression"),
+        }
+    }
+
+    fn parse_ident(&mut self) -> String {
+        match self.peek().unwrap() {
+            Token::Ident(name) => {
+                let name = name.clone();
+                self.pos += 1;
+                name
+            }
+            _ => panic!("Expected identifier"),
+        }
+    }
+
+    fn peek(&self) -> Option<&Token> {
+        self.tokens.get(self.pos)
+    }
+
+    fn consume(&mut self, expected: Token) {
+        if let Some(token) = self.peek() {
+            if std::mem::discriminant(token) == std::mem::discriminant(&expected) {
+                self.pos += 1;
+                return;
+            }
+        }
+        panic!("Unexpected token");
+    }
+}
+
+pub fn parse_file<P: AsRef<Path>>(path: P) -> Result<Program, std::io::Error> {
+    let mut file = File::open(path)?;
+    let mut contents = String::new();
+    file.read_to_string(&mut contents)?;
+
+    let mut lexer = Lexer::new(&contents);
+    let mut tokens = Vec::new();
+    while let Some(token) = lexer.next_token() {
+        tokens.push(token);
+    }
+
+    let mut parser = Parser::new(tokens);
+    Ok(parser.parse())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parser() {
+        let program = parse_file("example.sl").unwrap();
+        println!("{:#?}", program);
     }
 }

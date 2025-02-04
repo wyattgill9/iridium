@@ -21,12 +21,10 @@ impl Assembler {
     }
 
     pub fn compile(&mut self, source: &str) -> Result<Vec<u8>, AssemblerError> {
-        // collect symb on first pass
         let mut first_pass_lines = Vec::new();
         let mut current_address = 0;
 
         for line in source.lines() {
-            // remove comments
             let line = line.split(';').next().unwrap_or("").trim();
 
             if line.is_empty() {
@@ -34,7 +32,6 @@ impl Assembler {
             }
 
             if line.ends_with(':') {
-                // symbol
                 let label = line[..line.len() - 1].trim();
                 self.symbols.insert(label.to_string(), current_address);
                 continue;
@@ -61,7 +58,7 @@ impl Assembler {
                     let register = self.parse_register(&tokens[1])?;
                     let value = self.parse_value(&tokens[2])?;
 
-                    bytecode.push(1); // LOAD 
+                    bytecode.push(1); // LOAD opcode
                     bytecode.push(register);
                     bytecode.extend_from_slice(&value.to_be_bytes());
                 }
@@ -98,7 +95,7 @@ impl Assembler {
                     }
                     let target = self.parse_value(&tokens[1])?;
 
-                    bytecode.push(6); // JMP
+                    bytecode.push(6); // JMP opcode
                     bytecode.extend_from_slice(&target.to_be_bytes());
                 }
                 "JMPF" => {
@@ -110,17 +107,30 @@ impl Assembler {
                     }
                     let value = self.parse_value(&tokens[1])?;
 
-                    bytecode.push(7); // JMPF
+                    bytecode.push(7); // JMPF opcode
                     bytecode.extend_from_slice(&value.to_be_bytes());
                 }
+                "PRINT" => {
+                    if tokens.len() < 2 {
+                        return Err(AssemblerError::SyntaxError(format!(
+                            "Invalid PRINT instruction: {}",
+                            line
+                        )));
+                    }
+                    let register = self.parse_register(&tokens[1])?;
+
+                    bytecode.push(8); // PRINT opcode
+                    bytecode.push(register);
+                }
                 "HLT" => {
-                    bytecode.push(0); // HLT
+                    bytecode.push(0); // HLT opcode
                 }
                 _ => {
                     return Err(AssemblerError::UnknownInstruction(tokens[0].to_string()));
                 }
             }
         }
+
 
         while bytecode.len() < 32 {
             bytecode.push(0);
@@ -163,6 +173,7 @@ impl Assembler {
             "LOAD" => Ok(4), // opcode (1) + register (1) + 16-bit value (2)
             "ADD" | "SUB" | "MUL" | "DIV" => Ok(4), // opcode (1) + 3 registers (3)
             "JMP" | "JMPF" => Ok(3), // opcode (1) + 16-bit value (2)
+            "PRINT" => Ok(2), // opcode (1) + register (1)
             "HLT" => Ok(1),  // single byte opcode
             _ => Err(AssemblerError::UnknownInstruction(tokens[0].to_string())),
         }

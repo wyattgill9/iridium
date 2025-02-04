@@ -11,6 +11,7 @@ pub enum Opcode {
     DIV,
     JMP,
     JMPF,
+    PRINT,
 }
 
 #[derive(Debug, PartialEq)]
@@ -39,7 +40,6 @@ impl VM {
         }
     }
 
-    // Get register value
     pub fn get_register(&self, index: usize) -> Result<i32, VMError> {
         if index >= self.registers.len() {
             Err(VMError::RegisterOutOfBounds)
@@ -48,7 +48,6 @@ impl VM {
         }
     }
 
-    // Get all registers
     pub fn get_registers(&self) -> &[i32; 32] {
         &self.registers
     }
@@ -100,19 +99,19 @@ impl VM {
                 let (reg1, reg2, reg3) = self.get_three_registers()?;
                 self.registers[reg3] = self.registers[reg1]
                     .checked_add(self.registers[reg2])
-                    .unwrap_or(0); // handle potential overflow
+                    .unwrap_or(0); 
             }
             Opcode::SUB => {
                 let (reg1, reg2, reg3) = self.get_three_registers()?;
                 self.registers[reg3] = self.registers[reg1]
                     .checked_sub(self.registers[reg2])
-                    .unwrap_or(0); // handle potential underflow
+                    .unwrap_or(0); 
             }
             Opcode::MUL => {
                 let (reg1, reg2, reg3) = self.get_three_registers()?;
                 self.registers[reg3] = self.registers[reg1]
                     .checked_mul(self.registers[reg2])
-                    .unwrap_or(0); // handle potential overflow
+                    .unwrap_or(0);
             }
             Opcode::DIV => {
                 let (reg1, reg2, reg3) = self.get_three_registers()?;
@@ -134,7 +133,11 @@ impl VM {
             Opcode::JMPF => {
                 let value = self.registers[self.next_8_bits().unwrap_or(0) as usize];
                 self.pc += value as usize;
-            }            
+            }       
+            Opcode::PRINT => {
+                let value = self.registers[self.next_8_bits().unwrap_or(0) as usize];
+                println!("PRINT: {}", value);
+            }     
         }
 
         Ok(true)
@@ -191,6 +194,7 @@ impl From<u8> for Opcode {
             5 => Opcode::DIV,
             6 => Opcode::JMP,
             7 => Opcode::JMPF,
+            8 => Opcode::PRINT,
             _ => Opcode::IGL,
         }
     }
